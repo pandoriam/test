@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Reaction Time Study</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8f8f6;
+    --text: #1a1a1a;
+    --muted: #888;
+    --blue: #2563eb;
+    --orange: #ea580c;
+    --line: #e0e0da;
+    --accent: #1a1a1a;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+  }
+
+  /* ── SCREENS ── */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .screen.active { opacity: 1; pointer-events: all; }
+
+  /* ── INTRO ── */
+  #screen-intro h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: clamp(22px, 6vw, 32px);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  #screen-intro p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: #444;
+    text-align: center;
+    max-width: 340px;
+    margin-bottom: 36px;
+  }
+  .legend {
+    display: flex; gap: 800px;
+    margin-bottom: 36px;
+    align-items: flex-start;
+  }
+  .legend-item {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 12px;
+  }
+  .legend-dot {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+  }
+  .legend-dot.blue { background: var(--blue); }
+  .legend-dot.orange { background: var(--orange); }
+  .legend-label {
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--text);
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 14px 40px;
+    border: 2px solid var(--text);
+    background: var(--text);
+    color: var(--bg);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+  }
+  .btn:active { transform: scale(0.97); opacity: 0.85; }
+
+  /* ── TRIAL SCREEN ── */
+  #screen-trial {
+    background: #ffffff;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: none;
+    user-select: none;
+  }
+  #trial-left, #trial-right {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 50%;
+  }
+  #trial-left { left: 0; }
+  #trial-right { right: 0; }
+
+  #dot {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #dot.visible { display: block; }
+
+  #trial-counter {
+    position: absolute;
+    top: 24px; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: #ccc;
+    letter-spacing: 1px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  #feedback-flash {
+    position: absolute; inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+    transition: opacity 0.12s;
+  }
+  #feedback-flash.show { opacity: 0.12; }
+  #feedback-flash.correct { background: #22c55e; }
+  #feedback-flash.wrong { background: #ef4444; }
+
+  /* ── RESULTS ── */
+  #screen-results { overflow-y: auto; padding: 48px 24px 32px; }
+  #screen-results h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 28px;
+    letter-spacing: -0.3px;
+    align-self: flex-start;
+  }
+
+  .results-table {
+    width: 100%;
+    max-width: 480px;
+    border-collapse: collapse;
+    margin-bottom: 36px;
+    font-size: 14px;
+  }
+  .results-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid var(--text);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .results-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+  }
+  .results-table tr:last-child td { border-bottom: 2px solid var(--text); }
+  .color-swatch {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* ── DEMO FORM ── */
+  #screen-form { overflow-y: auto; padding: 48px 24px 48px; align-items: flex-start; }
+  #screen-form h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  #screen-form p.sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 32px;
+  }
+
+  .form-group {
+    width: 100%; max-width: 400px;
+    margin-bottom: 22px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 3px;
+    background: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .form-group input:focus,
+  .form-group select:focus { border-color: var(--text); }
+
+  .radio-group {
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .radio-group label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    border: 1.5px solid var(--line);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+    transition: all 0.15s;
+    background: #fff;
+  }
+  .radio-group input[type="radio"] { display: none; }
+  .radio-group input[type="radio"]:checked + span {
+    font-weight: 500;
+  }
+  .radio-group label:has(input:checked) {
+    border-color: var(--text);
+    background: var(--text);
+    color: var(--bg);
+  }
+
+  #status-msg {
+    margin-top: 16px;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+    min-height: 20px;
+  }
+  #status-msg.error { color: var(--orange); }
+  #status-msg.success { color: #16a34a; }
+
+  /* ── DONE ── */
+  #screen-done h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 26px; font-weight: 600;
+    margin-bottom: 12px; text-align: center;
+  }
+  #screen-done p {
+    font-size: 15px; color: var(--muted);
+    text-align: center; max-width: 300px;
+  }
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<div id="screen-intro" class="screen active">
+  <h1>Reaction<br>Time Study</h1>
+  <p>A colored dot will appear in the center of the screen. Tap the correct side as fast as you can.</p>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot orange"></div>
+      <div class="legend-label">LEFT</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot blue"></div>
+      <div class="legend-label">RIGHT</div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:#999;margin-bottom:28px;">10 trials · respond as fast as possible</p>
+  <button class="btn" onclick="startTask()">BEGIN</button>
+</div>
+
+<!-- TRIAL -->
+<div id="screen-trial" class="screen">
+  <div id="trial-counter">— / 10</div>
+  <div id="feedback-flash"></div>
+  <div id="trial-left"></div>
+  <div id="trial-right"></div>
+  <div id="dot"></div>
+</div>
+
+<!-- RESULTS -->
+<div id="screen-results" class="screen">
+  <h2>Your Results</h2>
+  <table class="results-table" id="results-table"></table>
+  <button class="btn" onclick="showForm()">Continue →</button>
+</div>
+
+<!-- DEMOGRAPHICS -->
+<div id="screen-form" class="screen">
+  <h2>About You</h2>
+  <p class="sub">Your data will be recorded anonymously for research purposes.</p>
+
+  <div class="form-group">
+    <label>Name</label>
+    <input type="text" id="f-name" placeholder="First and last name" autocomplete="off">
+  </div>
+  <div class="form-group">
+    <label>Age</label>
+    <input type="number" id="f-age" placeholder="e.g. 22" min="10" max="99">
+  </div>
+  <div class="form-group">
+    <label>Gender</label>
+    <div class="radio-group">
+      <label><input type="radio" name="gender" value="Male"><span>Male</span></label>
+      <label><input type="radio" name="gender" value="Female"><span>Female</span></label>
+      <label><input type="radio" name="gender" value="Non-binary"><span>Non-binary</span></label>
+      <label><input type="radio" name="gender" value="Prefer not to say"><span>Prefer not to say</span></label>
+    </div>
+  </div>
+  <div class="form-group">
+    <label>Coffee this morning?</label>
+    <div class="radio-group">
+      <label><input type="radio" name="coffee" value="Yes"><span>Yes</span></label>
+      <label><input type="radio" name="coffee" value="No"><span>No</span></label>
+    </div>
+  </div>
+
+  <button class="btn" onclick="submitData()">SUBMIT</button>
+  <div id="status-msg"></div>
+</div>
+
+<!-- DONE -->
+<div id="screen-done" class="screen">
+  <h2>Thank you.</h2>
+  <p>Your results have been recorded. You may close this tab.</p>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+// PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
+const SHEET_URL = "https://script.google.com/macros/s/AKfycby05ieDa38yGLs2dqv8gXPnOgrEgRTr496115y9z2hX1VzI71SVKQ6DJ9YldXXXYo5lbQ/exec";
+
+const TOTAL_TRIALS = 10;
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let trials = [];       // { color, correct, rt } — rt null if not responded
+let currentTrial = 0;
+let dotColor = null;
+let dotShownAt = null;
+let waitingForResponse = false;
+let trialTimeout = null;
+
+// ── SCREEN NAV ───────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── TRIAL LOGIC ───────────────────────────────────────────────────────────────
+function startTask() {
+  trials = [];
+  currentTrial = 0;
+  showScreen('screen-trial');
+  scheduleNextTrial();
+}
+
+function scheduleNextTrial() {
+  if (currentTrial >= TOTAL_TRIALS) {
+    endTask(); return;
+  }
+  const delay = Math.random() * 5000; // 0–5s ISI
+  updateCounter();
+  trialTimeout = setTimeout(showDot, delay);
+}
+
+function showDot() {
+  dotColor = Math.random() < 0.5 ? 'blue' : 'orange';
+  const dot = document.getElementById('dot');
+  dot.style.background = dotColor === 'blue' ? '#2563eb' : '#ea580c';
+  dot.classList.add('visible');
+  dotShownAt = performance.now();
+  waitingForResponse = true;
+
+  // Auto-advance if no response after 3s (counted as miss)
+  trialTimeout = setTimeout(() => {
+    if (waitingForResponse) recordResponse(null);
+  }, 6000);
+}
+
+function hideDot() {
+  const dot = document.getElementById('dot');
+  dot.classList.remove('visible');
+  dot.style.background = '';
+}
+
+function recordResponse(side) {
+  if (!waitingForResponse) return;
+  clearTimeout(trialTimeout);
+  waitingForResponse = false;
+
+  const rt = side !== null ? Math.round(performance.now() - dotShownAt) : null;
+  const correct = side !== null &&
+    ((dotColor === 'blue' && side === 'right') ||
+     (dotColor === 'orange' && side === 'left'));
+
+  trials.push({ color: dotColor, correct, rt });
+  flashFeedback(correct);
+  hideDot();
+  currentTrial++;
+  scheduleNextTrial();
+}
+
+function flashFeedback(correct) {
+  const el = document.getElementById('feedback-flash');
+  el.className = 'show ' + (correct ? 'correct' : 'wrong');
+  setTimeout(() => el.className = '', 300);
+}
+
+function updateCounter() {
+  document.getElementById('trial-counter').textContent =
+    `${currentTrial} / ${TOTAL_TRIALS}`;
+}
+
+// ── TAP HANDLERS ─────────────────────────────────────────────────────────────
+document.getElementById('trial-left').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (waitingForResponse) recordResponse('left');
+});
+document.getElementById('trial-right').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (waitingForResponse) recordResponse('right');
+});
+
+// ── RESULTS ──────────────────────────────────────────────────────────────────
+function endTask() {
+  buildResultsTable();
+  showScreen('screen-results');
+}
+
+function stats(rts) {
+  const valid = rts.filter(r => r !== null);
+  if (valid.length === 0) return { mean: 'N/A', sd: 'N/A' };
+  const mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+  const sd = Math.sqrt(valid.reduce((a, b) => a + (b - mean) ** 2, 0) / valid.length);
+  return { mean: mean.toFixed(0), sd: sd.toFixed(0) };
+}
+
+function buildResultsTable() {
+  const blueRTs  = trials.filter(t => t.color === 'blue').map(t => t.rt);
+  const orangeRTs = trials.filter(t => t.color === 'orange').map(t => t.rt);
+  const allRTs   = trials.map(t => t.rt);
+
+  const blueAcc  = trials.filter(t => t.color === 'blue' && t.correct).length;
+  const orangeAcc = trials.filter(t => t.color === 'orange' && t.correct).length;
+
+  const bStats = stats(blueRTs);
+  const oStats = stats(orangeRTs);
+  const aStats = stats(allRTs);
+
+  const rows = [
+    ['<span class="color-swatch" style="background:#2563eb"></span>Blue',
+      blueRTs.length, `${blueAcc}/${blueRTs.length}`,
+      bStats.mean + ' ms', bStats.sd + ' ms'],
+    ['<span class="color-swatch" style="background:#ea580c"></span>Orange',
+      orangeRTs.length, `${orangeAcc}/${orangeRTs.length}`,
+      oStats.mean + ' ms', oStats.sd + ' ms'],
+    ['<strong>Overall</strong>',
+      allRTs.length, `${blueAcc + orangeAcc}/${TOTAL_TRIALS}`,
+      aStats.mean + ' ms', aStats.sd + ' ms'],
+  ];
+
+  const table = document.getElementById('results-table');
+  table.innerHTML = `
+    <thead><tr>
+      <th>Condition</th><th>Trials</th><th>Correct</th><th>Mean RT</th><th>SD</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}
+    </tbody>`;
+}
+
+// ── FORM ─────────────────────────────────────────────────────────────────────
+function showForm() { showScreen('screen-form'); }
+
+function submitData() {
+  const name   = document.getElementById('f-name').value.trim();
+  const age    = document.getElementById('f-age').value.trim();
+  const gender = document.querySelector('input[name="gender"]:checked')?.value;
+  const coffee = document.querySelector('input[name="coffee"]:checked')?.value;
+  const msg    = document.getElementById('status-msg');
+
+  if (!name || !age || !gender || !coffee) {
+    msg.className = 'error';
+    msg.textContent = 'Please complete all fields.';
+    return;
+  }
+
+  msg.className = '';
+  msg.textContent = 'Submitting…';
+
+  // Build payload
+  const blueRTs   = trials.filter(t => t.color === 'blue').map(t => t.rt);
+  const orangeRTs = trials.filter(t => t.color === 'orange').map(t => t.rt);
+  const allRTs    = trials.map(t => t.rt);
+  const bStats    = stats(blueRTs);
+  const oStats    = stats(orangeRTs);
+  const aStats    = stats(allRTs);
+
+  // EST timestamp
+  const now = new Date();
+  const estStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+
+  // Each trial is just the RT in ms (or NR if no response)
+  const trialFields = {};
+  trials.forEach((t, i) => {
+    trialFields[`trial_${i+1}`] = t.rt !== null ? t.rt : 'NR';
+  });
+
+  const payload = {
+    timestamp: estStr,
+    name, age, gender, coffee,
+    blue_mean_rt: bStats.mean,
+    blue_sd_rt:   bStats.sd,
+    orange_mean_rt: oStats.mean,
+    orange_sd_rt:   oStats.sd,
+    overall_mean_rt: aStats.mean,
+    overall_sd_rt:   aStats.sd,
+    blue_correct:   trials.filter(t => t.color==='blue' && t.correct).length,
+    orange_correct: trials.filter(t => t.color==='orange' && t.correct).length,
+    ...trialFields
+  };
+
+  fetch(SHEET_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(() => {
+    showScreen('screen-done');
+  }).catch(() => {
+    msg.className = 'error';
+    msg.textContent = 'Submission failed. Check your connection and try again.';
+  });
+}
+</script>
+</body>
+</html>
